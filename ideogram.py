@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 """
+borrowed from: https://www.biostars.org/p/147364/#147637
+
 Demonstrates plotting chromosome ideograms and genes (or any features, really)
 using matplotlib.
 
@@ -18,8 +20,10 @@ saved as "ideogram.txt". Lines look like this::
 
 """
 
+import matplotlib
 from matplotlib import pyplot as plt
-from matplotlib.collections import BrokenBarHCollection
+from matplotlib.collections import PolyCollection
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 import pandas
 
 
@@ -30,7 +34,7 @@ import pandas
 def chromosome_collections(df, y_positions, height,  **kwargs):
     """
 
-    Yields BrokenBarHCollection of features that can be added to an Axes
+    Yields PolyCollection of features that can be added to an Axes
     object.
 
     Parameters
@@ -42,23 +46,31 @@ def chromosome_collections(df, y_positions, height,  **kwargs):
 
     y_positions : dict
         Keys are chromosomes, values are y-value at which to anchor the
-        BrokenBarHCollection
+        PolyCollection
 
     height : float
-        Height of each BrokenBarHCollection
+        Height of each PolyCollection
 
-    Additional kwargs are passed to BrokenBarHCollection
+    Additional kwargs are passed to PolyCollection
     """
     del_width = False
     if 'width' not in df.columns:
         del_width = True
         df['width'] = df['end'] - df['start']
     for chrom, group in df.groupby('chrom'):
-        print chrom
+        print(chrom)
         yrange = (y_positions[chrom], height)
         xranges = group[['start', 'width']].values
-        yield BrokenBarHCollection(
-            xranges, yrange, facecolors=group['colors'], **kwargs)
+        ymin, ywidth = yrange
+        ymax = ymin + ywidth
+        verts = [[(xmin, ymin),
+                  (xmin, ymax),
+                  (xmin + xwidth, ymax),
+                  (xmin + xwidth, ymin),
+                  (xmin, ymin)] for xmin, xwidth in xranges]
+
+        yield PolyCollection(
+            verts, facecolors=group['colors'], **kwargs)
     if del_width:
         del df['width']
 
@@ -80,7 +92,7 @@ gene_padding = 0.1
 figsize = (6, 8)
 
 # Decide which chromosomes to use
-chromosome_list = ['chr%s' % i for i in range(1, 23) + ['M', 'X', 'Y']]
+chromosome_list = ['chr%s' % i for i in list(range(1, 23)) + ['X', 'Y']]
 
 # Keep track of the y positions for ideograms and genes for each chromosome,
 # and the center of each ideogram (which is where we'll put the ytick labels)
@@ -99,9 +111,9 @@ for chrom in chromosome_list[::-1]:
 
 # Read in ideogram.txt, downloaded from UCSC Table Browser
 ideo = pandas.read_table(
-    'ideogram.txt',
-    skiprows=1,
-    names=['chrom', 'start', 'end', 'name', 'gieStain']
+    'OESO_103_sup_4.3.0.pass.map_sort.whatsappphase.gtf',
+    skiprows=0,
+    names=['chrom', 'junk', 'junk2', 'start', 'end', 'missing', 'strand','missing2', 'comment']
 )
 
 # Filter out chromosomes not in our list
@@ -111,30 +123,32 @@ ideo = ideo[ideo.chrom.apply(lambda x: x in chromosome_list)]
 ideo['width'] = ideo.end - ideo.start
 
 # Colors for different chromosome stains
-color_lookup = {
-    'gneg': (1., 1., 1.),
-    'gpos25': (.6, .6, .6),
-    'gpos50': (.4, .4, .4),
-    'gpos75': (.2, .2, .2),
-    'gpos100': (0., 0., 0.),
-    'acen': (.8, .4, .4),
-    'gvar': (.8, .8, .8),
-    'stalk': (.9, .9, .9),
-}
+color_lookup = [
+    (1., 1., 1.),
+    (.6, .6, .6),
+    (.4, .4, .4),
+    (.2, .2, .2),
+    (0., 0., 0.),
+    (.8, .4, .4),
+    (.8, .8, .8),
+    (.9, .9, .9),
+]
 
 # Add a new column for colors
-ideo['colors'] = ideo['gieStain'].apply(lambda x: color_lookup[x])
+#ideo['colors'] = ideo['gieStain'].apply(lambda x: color_lookup[x])
+paired_cm = matplotlib.colormaps['Paired'].colors
+ideo['colors'] = [paired_cm[i % len(paired_cm)] for i in range(0,len(ideo))]
 
 
 # Same thing for genes
-genes = pandas.read_table(
+""" genes = pandas.read_table(
     'ucsc_genes.txt',
     names=['chrom', 'start', 'end', 'name'],
     usecols=range(4))
 genes = genes[genes.chrom.apply(lambda x: x in chromosome_list)]
 genes['width'] = genes.end - genes.start
 genes['colors'] = '#2243a8'
-
+ """
 
 fig = plt.figure(figsize=figsize)
 ax = fig.add_subplot(111)
@@ -145,12 +159,12 @@ for collection in chromosome_collections(ideo, chrom_ybase, chrom_height):
     ax.add_collection(collection)
 
 # ...and the gene data
-print("adding genes...")
-for collection in chromosome_collections(
+"""print("adding genes...")
+  for collection in chromosome_collections(
     genes, gene_ybase, gene_height, alpha=0.5, linewidths=0
 ):
     ax.add_collection(collection)
-
+ """
 # Axes tweaking
 ax.set_yticks([chrom_centers[i] for i in chromosome_list])
 ax.set_yticklabels(chromosome_list)
